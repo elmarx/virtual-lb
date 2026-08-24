@@ -1,11 +1,11 @@
 mod context;
 mod errors;
+mod reconcile;
 mod server;
 mod telemetry;
-mod reconcile;
 
 use crate::context::Context;
-use futures::{StreamExt};
+use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::runtime::{Controller, watcher};
 use kube::{Api, Client};
@@ -39,9 +39,9 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let services = Api::<Service>::all(client.clone());
+    let watcher = watcher::Config::default().fields("spec.type=LoadBalancer");
 
-    let service_controller =
-        Controller::new(services, watcher::Config::default()).shutdown_on_signal();
+    let service_controller = Controller::new(services, watcher).shutdown_on_signal();
 
     tokio::spawn(mark_ready_once_synced(
         service_controller.store(),
