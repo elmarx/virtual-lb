@@ -1,10 +1,27 @@
+mod context;
+mod errors;
 mod server;
 mod telemetry;
+mod reconcile;
 
+use crate::context::Context;
+use futures::{StreamExt};
+use k8s_openapi::api::core::v1::Service;
+use kube::runtime::{Controller, watcher};
+use kube::{Api, Client};
 use server::Readiness;
-use tracing::info;
+use std::sync::Arc;
+use tracing::{error, info};
 
-const DEFAULT_HTTP_ADDR: &str = "0.0.0.0:8080";
+async fn mark_ready_once_synced(
+    store: kube::runtime::reflector::Store<Service>,
+    readiness: Readiness,
+) {
+    if store.wait_until_ready().await.is_ok() {
+        info!("controller cache synced, marking ready");
+        readiness.set_ready();
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,17 +29,44 @@ async fn main() -> anyhow::Result<()> {
 
     info!("kuhbärnetes controller starting up");
 
-    let addr: std::net::SocketAddr = std::env::var("HTTP_ADDR")
-        .unwrap_or_else(|_| DEFAULT_HTTP_ADDR.to_string())
-        .parse()
-        .expect("HTTP_ADDR must be a valid socket address");
+    let addr: std::net::SocketAddr = "0.0.0.0:8080".parse().unwrap();
 
+    let client = Client::try_default().await?;
     let readiness = Readiness::default();
-    // TODO: once a controller/reconciler is added, flip this only after the
-    // initial watch/relist has completed instead of immediately.
-    readiness.set_ready();
 
-    server::serve(addr, readiness, shutdown_signal()).await?;
+    let ctx = Arc::new(Context {
+        client: client.clone(),
+    });
+
+    let services = Api::<Service>::all(client.clone());
+
+    let service_controller =
+        Controller::new(services, watcher::Config::default()).shutdown_on_signal();
+
+    tokio::spawn(mark_ready_once_synced(
+        service_controller.store(),
+        readiness.clone(),
+    ));
+
+    let controller = service_controller
+        .run(reconcile::reconcile, reconcile::error_policy, ctx)
+        .for_each(|result| async move {
+            if let Err(err) = result {
+                error!(error = %err, "reconcile failed");
+            }
+        });
+
+    let http_server = server::serve(addr, readiness, shutdown_signal());
+
+    tokio::select! {
+        () = controller => {
+            error!("controller exited unexpectedly");
+            return Err(anyhow::anyhow!("controller exited"));
+        }
+        result = http_server => {
+            result.map_err(|err| anyhow::anyhow!("http server failed: {err}"))?;
+        }
+    }
 
     info!("kuhbärnetes shut down cleanly");
     Ok(())
@@ -37,16 +81,12 @@ async fn shutdown_signal() {
             .expect("failed to install SIGINT handler");
     };
 
-    #[cfg(unix)]
     let terminate = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .expect("failed to install SIGTERM handler")
             .recv()
             .await;
     };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
 
     tokio::select! {
         () = ctrl_c => info!("received SIGINT, shutting down"),
