@@ -1,10 +1,8 @@
-use crate::constants::{
-    MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME_KEY,
-};
+use crate::constants::{MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME_KEY};
 use crate::context::Context;
 use crate::errors;
 use crate::service_ext::ServiceExt;
-use k8s_openapi::api::core::v1::{LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus};
+use k8s_openapi::api::core::v1::{LoadBalancerStatus, Service, ServiceStatus};
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::runtime::controller::Action;
 use kube::{Api, ResourceExt};
@@ -51,21 +49,24 @@ pub async fn reconcile(
         lb_members.items.len()
     );
 
+    let mut ingress = lb_members
+        .iter()
+        .flat_map(ServiceExt::ingress)
+        .collect::<Vec<_>>();
+
+    // sort (to avoid needless updates) and dedup
+    ingress.sort_unstable_by_key(|k| (k.hostname.as_deref(), k.ip.as_deref()));
+    ingress.dedup();
+
+    let ingress = ingress
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
     let service_status = Service {
         status: Some(ServiceStatus {
             load_balancer: Some(LoadBalancerStatus {
-                ingress: Some(vec![
-                    LoadBalancerIngress {
-                        ip_mode: Some("VIP".to_string()),
-                        ip: Some("192.168.1.1".to_string()),
-                        ..Default::default()
-                    },
-                    LoadBalancerIngress {
-                        ip_mode: Some("VIP".to_string()),
-                        ip: Some("192.168.1.2".to_string()),
-                        ..Default::default()
-                    },
-                ]),
+                ingress: Some(ingress),
             }),
             ..Default::default()
         }),
