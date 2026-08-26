@@ -1,15 +1,15 @@
+use crate::constants::{
+    MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_CLASS, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME,
+};
 use crate::context::Context;
 use crate::errors;
 use k8s_openapi::api::core::v1::{LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus};
-use kube::{Api, Resource, ResourceExt};
+use kube::api::{ListParams, Patch, PatchParams};
 use kube::runtime::controller::Action;
+use kube::{Api, ResourceExt};
 use std::sync::Arc;
 use std::time::Duration;
-use kube::api::{Patch, PatchParams};
 use tracing::{info, warn};
-
-pub const MANAGER: &str = "virtual-lb";
-
 
 pub async fn reconcile(
     service: Arc<Service>,
@@ -21,14 +21,39 @@ pub async fn reconcile(
         .spec
         .as_ref()
         .and_then(|spec| spec.load_balancer_class.as_ref())
-        .is_some_and(|class| class == "athmer.cloud/virtual");
+        .is_some_and(|class| class == VIRTUAL_LB_CLASS);
     if !our_lb_class {
         return Ok(Action::await_change());
     }
 
-    let ns = service.namespace().ok_or_else(|| errors::VirtualLbError::MissingNamespace(name.clone()))?;
+    let ns = service
+        .namespace()
+        .ok_or_else(|| errors::VirtualLbError::MissingNamespace(name.clone()))?;
+
+    let Some(lb_name) = service.annotations().get(VIRTUAL_LB_NAME) else {
+        warn!("service {name} is missing annotation {VIRTUAL_LB_NAME}");
+        // TODO: write status into the service to indicate that this is an error
+        return Ok(Action::await_change());
+    };
 
     let service_api = Api::<Service>::namespaced(ctx.client.clone(), &ns);
+
+    let list_parems = ListParams::default()
+        .labels(&format!(
+            "{VIRTUAL_LB_NAME}={lb_name},{VIRTUAL_LB_IS_MEMBER}=true"
+        ))
+        .fields(TYPE_LB_SELECTOR);
+    let lb_members = service_api.list(&list_parems).await?;
+    if lb_members.items.is_empty() {
+        warn!("no members found for virtual loadbalancer {lb_name}");
+        // TODO: write status, and is this the right action? we need to wait for the MEMBERs to change/be created
+        return Ok(Action::await_change());
+    }
+
+    info!(
+        "found {} members for virtual loadbalancer {lb_name}",
+        lb_members.items.len()
+    );
 
     let service_status = Service {
         status: Some(ServiceStatus {
@@ -43,16 +68,21 @@ pub async fn reconcile(
                         ip_mode: Some("VIP".to_string()),
                         ip: Some("192.168.1.2".to_string()),
                         ..Default::default()
-                    }
-                ])}),
+                    },
+                ]),
+            }),
             ..Default::default()
         }),
         ..Default::default()
     };
 
-    service_api.patch_status(
-        &name, &PatchParams::apply(MANAGER), &Patch::Apply(service_status),
-    ).await?;
+    service_api
+        .patch_status(
+            &name,
+            &PatchParams::apply(MANAGER),
+            &Patch::Apply(service_status),
+        )
+        .await?;
 
     info!("set loadbalancer for: {name}");
     Ok(Action::requeue(Duration::from_mins(1)))
