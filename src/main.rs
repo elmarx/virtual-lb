@@ -1,14 +1,17 @@
+mod constants;
 mod context;
 mod errors;
 mod reconcile;
 mod server;
 mod telemetry;
 
+use crate::constants::{TYPE_LB_SELECTOR, VIRTUAL_LB_CLASS, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME};
 use crate::context::Context;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
+use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{Controller, watcher};
-use kube::{Api, Client};
+use kube::{Api, Client, ResourceExt};
 use server::Readiness;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -38,10 +41,46 @@ async fn main() -> anyhow::Result<()> {
         client: client.clone(),
     });
 
-    let services = Api::<Service>::all(client.clone());
-    let watcher = watcher::Config::default().fields("spec.type=LoadBalancer");
+    let service_api = Api::<Service>::all(client.clone());
+    let lb_watcher = watcher::Config::default().fields(TYPE_LB_SELECTOR);
+    let virtual_lb_watcher = watcher::Config::default()
+        .fields(TYPE_LB_SELECTOR)
+        .labels(&format!("{VIRTUAL_LB_IS_MEMBER}=true"));
 
-    let service_controller = Controller::new(services, watcher).shutdown_on_signal();
+    let service_controller = Controller::new(service_api.clone(), lb_watcher);
+    let primary_store = service_controller.store();
+    let service_controller = service_controller
+        .watches(service_api.clone(), virtual_lb_watcher, move |member| {
+            // members are only relevant if they have the name set
+            let Some(cluster_name) = member.labels().get(VIRTUAL_LB_NAME) else {
+                return Vec::new();
+            };
+            primary_store
+                .state()
+                .into_iter()
+                .filter_map(|lb| {
+                    // first check if this is our loadBalancerClass
+                    let is_virtual_lb_class = lb
+                        .spec
+                        .as_ref()
+                        .and_then(|s| s.load_balancer_class.as_ref())
+                        .is_some_and(|lbc| lbc == VIRTUAL_LB_CLASS);
+
+                    // now check if this is the virtual lb of the lb-cluster
+                    let is_same_cluster = lb
+                        .annotations()
+                        .get(VIRTUAL_LB_NAME)
+                        .is_some_and(|n| n == cluster_name);
+
+                    if is_virtual_lb_class && is_same_cluster {
+                        Some(ObjectRef::from_obj(lb.as_ref()))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .shutdown_on_signal();
 
     tokio::spawn(mark_ready_once_synced(
         service_controller.store(),

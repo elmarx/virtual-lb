@@ -1,4 +1,3 @@
-
 #[derive(Debug, thiserror::Error)]
 pub enum VirtualLbError {
     #[error("Kubernetes API error: {0}")]
