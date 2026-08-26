@@ -1,8 +1,9 @@
 use crate::constants::{
-    MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_CLASS, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME,
+    MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME_KEY,
 };
 use crate::context::Context;
 use crate::errors;
+use crate::service_ext::ServiceExt;
 use k8s_openapi::api::core::v1::{LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus};
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::runtime::controller::Action;
@@ -17,12 +18,7 @@ pub async fn reconcile(
 ) -> Result<Action, errors::VirtualLbError> {
     let name = service.name_any();
     // first check if this a gateway class we're responsible for
-    let our_lb_class = service
-        .spec
-        .as_ref()
-        .and_then(|spec| spec.load_balancer_class.as_ref())
-        .is_some_and(|class| class == VIRTUAL_LB_CLASS);
-    if !our_lb_class {
+    if !service.is_our_load_balancer_class() {
         return Ok(Action::await_change());
     }
 
@@ -30,8 +26,8 @@ pub async fn reconcile(
         .namespace()
         .ok_or_else(|| errors::VirtualLbError::MissingNamespace(name.clone()))?;
 
-    let Some(lb_name) = service.annotations().get(VIRTUAL_LB_NAME) else {
-        warn!("service {name} is missing annotation {VIRTUAL_LB_NAME}");
+    let Some(lb_name) = service.virtual_lb_cluster_annotation() else {
+        warn!("service {name} is missing annotation {VIRTUAL_LB_NAME_KEY}");
         // TODO: write status into the service to indicate that this is an error
         return Ok(Action::await_change());
     };
@@ -40,7 +36,7 @@ pub async fn reconcile(
 
     let list_parems = ListParams::default()
         .labels(&format!(
-            "{VIRTUAL_LB_NAME}={lb_name},{VIRTUAL_LB_IS_MEMBER}=true"
+            "{VIRTUAL_LB_NAME_KEY}={lb_name},{VIRTUAL_LB_IS_MEMBER}=true"
         ))
         .fields(TYPE_LB_SELECTOR);
     let lb_members = service_api.list(&list_parems).await?;
