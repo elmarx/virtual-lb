@@ -3,15 +3,17 @@ mod context;
 mod errors;
 mod reconcile;
 mod server;
+mod service_ext;
 mod telemetry;
 
-use crate::constants::{TYPE_LB_SELECTOR, VIRTUAL_LB_CLASS, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME};
+use crate::constants::{TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER};
 use crate::context::Context;
+use crate::service_ext::ServiceExt;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Service;
 use kube::runtime::reflector::ObjectRef;
 use kube::runtime::{Controller, watcher};
-use kube::{Api, Client, ResourceExt};
+use kube::{Api, Client};
 use server::Readiness;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -52,27 +54,16 @@ async fn main() -> anyhow::Result<()> {
     let service_controller = service_controller
         .watches(service_api.clone(), virtual_lb_watcher, move |member| {
             // members are only relevant if they have the name set
-            let Some(cluster_name) = member.labels().get(VIRTUAL_LB_NAME) else {
+            let Some(cluster_name) = member.virtual_lb_cluster_label() else {
                 return Vec::new();
             };
             primary_store
                 .state()
                 .into_iter()
                 .filter_map(|lb| {
-                    // first check if this is our loadBalancerClass
-                    let is_virtual_lb_class = lb
-                        .spec
-                        .as_ref()
-                        .and_then(|s| s.load_balancer_class.as_ref())
-                        .is_some_and(|lbc| lbc == VIRTUAL_LB_CLASS);
-
-                    // now check if this is the virtual lb of the lb-cluster
-                    let is_same_cluster = lb
-                        .annotations()
-                        .get(VIRTUAL_LB_NAME)
-                        .is_some_and(|n| n == cluster_name);
-
-                    if is_virtual_lb_class && is_same_cluster {
+                    if lb.is_our_load_balancer_class()
+                        && lb.virtual_lb_cluster_annotation() == Some(cluster_name)
+                    {
                         Some(ObjectRef::from_obj(lb.as_ref()))
                     } else {
                         None
