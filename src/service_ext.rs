@@ -1,3 +1,5 @@
+use k8s_openapi::api::core::v1::LoadBalancerIngress;
+
 use crate::constants::{VIRTUAL_LB_CLASS, VIRTUAL_LB_NAME_KEY};
 
 pub trait ServiceExt {
@@ -8,6 +10,8 @@ pub trait ServiceExt {
     fn virtual_lb_cluster_annotation(&self) -> Option<&str>;
 
     fn virtual_lb_cluster_label(&self) -> Option<&str>;
+
+    fn ingress(&self) -> impl Iterator<Item = &LoadBalancerIngress>;
 }
 
 impl ServiceExt for k8s_openapi::api::core::v1::Service {
@@ -34,5 +38,14 @@ impl ServiceExt for k8s_openapi::api::core::v1::Service {
             .as_ref()?
             .get(VIRTUAL_LB_NAME_KEY)
             .map(String::as_str)
+    }
+
+    fn ingress(&self) -> impl Iterator<Item = &LoadBalancerIngress> {
+        self.status
+            .as_ref()
+            .and_then(|s| s.load_balancer.as_ref())
+            .and_then(|lb| lb.ingress.as_ref())
+            .into_iter()
+            .flatten()
     }
 }
