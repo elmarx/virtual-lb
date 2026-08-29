@@ -1,4 +1,5 @@
-image := "virtual-lb"
+image := "cr.athmer.cloud/virtual-lb"
+revision := `jj log -r @ --no-graph --template 'self.commit_id().short()'`
 
 # run all local CI checks: compile check, tests, formatting, and lints
 ci:
@@ -9,5 +10,5 @@ ci:
     cargo clippy -- -W clippy::pedantic
 
 # build the operator's container image
-docker-build:
-    docker build -t {{ image }} .
+build:
+    docker build --push -t {{ image }} -t {{ image }}:{{ revision }} .
