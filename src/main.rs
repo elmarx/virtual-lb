@@ -6,7 +6,7 @@ mod server;
 mod service_ext;
 mod telemetry;
 
-use crate::constants::{TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER};
+use crate::constants::selector;
 use crate::context::Context;
 use crate::service_ext::ServiceExt;
 use futures::StreamExt;
@@ -74,10 +74,10 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let service_api = Api::<Service>::all(client.clone());
-    let lb_watcher = watcher::Config::default().fields(TYPE_LB_SELECTOR);
+    let lb_watcher = watcher::Config::default().fields(selector::TYPE_LB);
     let virtual_lb_watcher = watcher::Config::default()
-        .fields(TYPE_LB_SELECTOR)
-        .labels(&format!("{VIRTUAL_LB_IS_MEMBER}=true"));
+        .fields(selector::TYPE_LB)
+        .labels(selector::VIRTUAL_LB_IS_MEMBER);
 
     let service_controller = Controller::new(service_api.clone(), lb_watcher);
     let primary_store = service_controller.store();

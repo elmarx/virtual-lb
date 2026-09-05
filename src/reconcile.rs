@@ -1,4 +1,4 @@
-use crate::constants::{MANAGER, TYPE_LB_SELECTOR, VIRTUAL_LB_IS_MEMBER, VIRTUAL_LB_NAME_KEY};
+use crate::constants::{MANAGER, VIRTUAL_LB_NAME_KEY, selector};
 use crate::context::Context;
 use crate::errors;
 use crate::service_ext::ServiceExt;
@@ -34,9 +34,10 @@ pub async fn reconcile(
 
     let list_parems = ListParams::default()
         .labels(&format!(
-            "{VIRTUAL_LB_NAME_KEY}={lb_name},{VIRTUAL_LB_IS_MEMBER}=true"
+            "{VIRTUAL_LB_NAME_KEY}={lb_name},{}",
+            selector::VIRTUAL_LB_IS_MEMBER
         ))
-        .fields(TYPE_LB_SELECTOR);
+        .fields(selector::TYPE_LB);
     let lb_members = service_api.list(&list_parems).await?;
     if lb_members.items.is_empty() {
         warn!("no members found for virtual loadbalancer {lb_name}");
