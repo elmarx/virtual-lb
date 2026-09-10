@@ -1,0 +1,30 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "virtual-lb.fullname" . }}
+  labels:
+    {{- include "virtual-lb.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["services/status"]
+    verbs: ["patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "virtual-lb.fullname" . }}
+  labels:
+    {{- include "virtual-lb.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "virtual-lb.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "virtual-lb.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
