@@ -1,0 +1,63 @@
+name: version-bump-prs
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  bump:
+    name: Bump ${{ matrix.bump }} version
+    if: ${{ github.repository_owner == 'elmarx' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: version-bump-${{ matrix.bump }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        bump: [major, minor, patch]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit
+
+      - name: Bump Cargo.toml / Cargo.lock version
+        id: bump
+        run: |
+          cargo set-version --bump ${{ matrix.bump }}
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Bump Helm chart version
+        run: |
+          sed -i -E "s/^version: .*/version: ${{ steps.bump.outputs.version }}/" charts/virtual-lb/Chart.yaml
+          sed -i -E "s/^appVersion: .*/appVersion: \"${{ steps.bump.outputs.version }}\"/" charts/virtual-lb/Chart.yaml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.VERSION_BUMP_PR_TOKEN }}
+          commit-message: "chore: bump version to ${{ steps.bump.outputs.version }}"
+          branch: version-bump/${{ matrix.bump }}
+          delete-branch: true
+          title: "chore: bump ${{ matrix.bump }} version to ${{ steps.bump.outputs.version }}"
+          body: |
+            Automated ${{ matrix.bump }} version bump to `${{ steps.bump.outputs.version }}`.
+
+            Updated files:
+            - `Cargo.toml` / `Cargo.lock`
+            - `charts/virtual-lb/Chart.yaml`
+          labels: version-bump,${{ matrix.bump }}
