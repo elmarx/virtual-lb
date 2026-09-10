@@ -6,8 +6,8 @@ ci:
     cargo check --frozen
     cargo nextest run --no-tests=warn
     cargo fmt -- --check
-    cargo clippy -- -D warnings
-    cargo clippy -- -W clippy::pedantic
+    cargo clippy --all-features --all-targets -- -D warnings
+    cargo clippy --all-features --all-targets -- -W clippy::pedantic
 
 # build the operator's container image
 build:
