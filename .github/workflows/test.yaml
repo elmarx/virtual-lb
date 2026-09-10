@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+      - "!version-bump/**"
   pull_request:
 
 permissions:
