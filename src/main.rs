@@ -16,7 +16,19 @@ use kube::runtime::{Controller, watcher};
 use kube::{Api, Client};
 use server::Readiness;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info};
+
+/// How often to re-poll the store's readiness while waiting for the initial sync.
+///
+/// `kube_runtime`'s `Store::wait_until_ready()` is backed by a single shared
+/// oneshot channel: only the *most recently polled* waiter is guaranteed to be
+/// woken when the store becomes ready. Since `Controller::run()` also awaits
+/// the same store internally (to gate reconciliation), our independent call
+/// here can lose the race and never get woken up, even though the store did
+/// become ready. Re-polling on a short interval sidesteps this by not relying
+/// on the wakeup at all.
+const READINESS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Waits for the controller's initial cache sync and flips the readiness flag.
 ///
@@ -28,14 +40,20 @@ async fn mark_ready_once_synced(
     store: kube::runtime::reflector::Store<Service>,
     readiness: Readiness,
 ) {
-    match store.wait_until_ready().await {
-        Ok(()) => {
-            info!("controller cache synced, marking ready");
-            readiness.set_ready();
-        }
-        Err(err) => {
-            error!(error = %err, "controller cache failed to synchronize, exiting");
-            std::process::exit(1);
+    loop {
+        match tokio::time::timeout(READINESS_POLL_INTERVAL, store.wait_until_ready()).await {
+            Ok(Ok(())) => {
+                info!("controller cache synced, marking ready");
+                readiness.set_ready();
+                return;
+            }
+            Ok(Err(err)) => {
+                error!(error = %err, "controller cache failed to synchronize, exiting");
+                std::process::exit(1);
+            }
+            Err(_elapsed) => {
+                // Still waiting (or our wakeup was lost to a concurrent waiter) - retry.
+            }
         }
     }
 }
