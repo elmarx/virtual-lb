@@ -1,9 +1,16 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: virtual
+  namespace: demo
   annotations:
-    athmer.cloud/virtual-lb.cluster-name: "demo"
+    athmer.cloud/virtual-lb.name: "demo"
 spec:
   loadBalancerClass: "athmer.cloud/virtual"
   selector:

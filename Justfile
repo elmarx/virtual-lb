@@ -12,3 +12,7 @@ ci:
 # build the operator's container image
 build:
     docker build --push -t {{ image }} -t {{ image }}:{{ revision }} .
+[working-directory: "manifests/deployment"]
+kustomize_set_image:
+    kustomize edit set image registry.athmer.cloud/virtual-lb=:{{ revision }}
+    
