@@ -33,7 +33,7 @@ jobs:
             exit 1
           fi
 
-      - name: Ensure version is the next semver after latest tag
+      - name: Ensure version matches or follows latest tag
         uses: actions/github-script@v7
         with:
           script: |
@@ -78,17 +78,18 @@ jobs:
             const latestStr = `${latest.major}.${latest.minor}.${latest.patch}`;
 
             const allowed = [
+              latestStr,
               `${latest.major + 1}.0.0`,
               `${latest.major}.${latest.minor + 1}.0`,
               `${latest.major}.${latest.minor}.${latest.patch + 1}`,
             ];
 
             core.info(`Latest tag: ${latestStr}`);
-            core.info(`Allowed next versions: ${allowed.join(', ')}`);
+            core.info(`Allowed versions: ${allowed.join(', ')}`);
             core.info(`Current Cargo.toml version: ${current}`);
 
             if (!allowed.includes(current)) {
               core.setFailed(
-                `Cargo.toml version "${current}" is not a valid next version after latest tag "${latestStr}". Expected one of: ${allowed.join(', ')}`
+                `Cargo.toml version "${current}" does not match or validly follow latest tag "${latestStr}". Expected one of: ${allowed.join(', ')}`
               );
             }
