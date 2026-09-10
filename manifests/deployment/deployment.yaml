@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: virtual-lb
+  name: virtual-lb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: virtual-lb
+  template:
+    metadata:
+      labels:
+        app: virtual-lb
+    spec:
+      serviceAccountName: virtual-lb
+      containers:
+        - image: registry.athmer.cloud/virtual-lb:latest
+          name: virtual-lb
+          env:
+            - name: LOG_FORMAT
+              value: json
+          resources:
+            limits:
+              memory: 16Mi
+            requests:
+              memory: 16Mi
+              cpu: 100m
