@@ -1,0 +1,35 @@
+name: test
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      - name: Check compilation
+        run: cargo check --locked
+      - name: Run tests
+        run: cargo nextest run --no-tests=warn
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Lint
+        run: cargo clippy --all-features --all-targets -- -D warnings
+      - name: Lint pedantic
+        run: cargo clippy --all-features --all-targets -- -D clippy::pedantic

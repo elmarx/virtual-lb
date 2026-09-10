@@ -3,11 +3,11 @@ revision := `jj log -r @ --no-graph --template 'self.commit_id().short()'`
 
 # run all local CI checks: compile check, tests, formatting, and lints
 ci:
-    cargo check --frozen
+    cargo check --locked
     cargo nextest run --no-tests=warn
     cargo fmt -- --check
-    cargo clippy -- -D warnings
-    cargo clippy -- -W clippy::pedantic
+    cargo clippy --all-features --all-targets -- -D warnings
+    cargo clippy --all-features --all-targets -- -W clippy::pedantic
 
 # build the operator's container image
 build:
