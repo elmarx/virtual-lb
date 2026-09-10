@@ -18,13 +18,25 @@ use server::Readiness;
 use std::sync::Arc;
 use tracing::{error, info};
 
+/// Waits for the controller's initial cache sync and flips the readiness flag.
+///
+/// If the sync never completes (e.g. the watcher's writer was dropped due to
+/// an unrecoverable error), this is an unrecoverable startup failure: exit
+/// immediately so Kubernetes restarts the pod, rather than leaving it stuck
+/// forever behind a failing readiness probe.
 async fn mark_ready_once_synced(
     store: kube::runtime::reflector::Store<Service>,
     readiness: Readiness,
 ) {
-    if store.wait_until_ready().await.is_ok() {
-        info!("controller cache synced, marking ready");
-        readiness.set_ready();
+    match store.wait_until_ready().await {
+        Ok(()) => {
+            info!("controller cache synced, marking ready");
+            readiness.set_ready();
+        }
+        Err(err) => {
+            error!(error = %err, "controller cache failed to synchronize, exiting");
+            std::process::exit(1);
+        }
     }
 }
 
