@@ -15,6 +15,10 @@ RUN cargo build --release --locked
 
 FROM debian:trixie-slim
 
+LABEL org.opencontainers.image.title="virtual-lb" \
+      org.opencontainers.image.description="Kubernetes controller for virtual LoadBalancer Services" \
+      org.opencontainers.image.source="https://github.com/elmarx/virtual-lb"
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
