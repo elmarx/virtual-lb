@@ -1,0 +1,94 @@
+name: version-check
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    name: version-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ensure Cargo.toml and Chart.yaml versions are in sync
+        run: |
+          cargo_version=$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          chart_version=$(grep -m1 '^version:' charts/virtual-lb/Chart.yaml | sed -E 's/version: *(.*)/\1/')
+          chart_app_version=$(grep -m1 '^appVersion:' charts/virtual-lb/Chart.yaml | sed -E 's/appVersion: *"?([^"]*)"?/\1/')
+
+          echo "Cargo.toml version:    $cargo_version"
+          echo "Chart.yaml version:    $chart_version"
+          echo "Chart.yaml appVersion: $chart_app_version"
+
+          if [ "$cargo_version" != "$chart_version" ] || [ "$cargo_version" != "$chart_app_version" ]; then
+            echo "::error::Version mismatch: Cargo.toml ($cargo_version) vs Chart.yaml version ($chart_version) / appVersion ($chart_app_version)"
+            exit 1
+          fi
+
+      - name: Ensure version is the next semver after latest tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const parseSemver = (v) => {
+              const m = v.match(/^(\d+)\.(\d+)\.(\d+)$/);
+              return m ? { major: +m[1], minor: +m[2], patch: +m[3] } : null;
+            };
+
+            const cargoToml = fs.readFileSync('Cargo.toml', 'utf8');
+            const versionMatch = cargoToml.match(/^version\s*=\s*"([^"]+)"/m);
+            if (!versionMatch) {
+              core.setFailed('Could not find version in Cargo.toml');
+              return;
+            }
+            const current = versionMatch[1];
+            const currentParsed = parseSemver(current);
+            if (!currentParsed) {
+              core.setFailed(`Cargo.toml version "${current}" is not valid semver (major.minor.patch)`);
+              return;
+            }
+
+            const tags = await github.paginate(github.rest.repos.listTags, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+
+            const semverTags = tags
+              .map((t) => t.name.replace(/^v/, ''))
+              .map(parseSemver)
+              .filter(Boolean);
+
+            if (semverTags.length === 0) {
+              core.info('No existing semver tags found; skipping next-version check.');
+              return;
+            }
+
+            semverTags.sort((a, b) => b.major - a.major || b.minor - a.minor || b.patch - a.patch);
+            const latest = semverTags[0];
+            const latestStr = `${latest.major}.${latest.minor}.${latest.patch}`;
+
+            const allowed = [
+              `${latest.major + 1}.0.0`,
+              `${latest.major}.${latest.minor + 1}.0`,
+              `${latest.major}.${latest.minor}.${latest.patch + 1}`,
+            ];
+
+            core.info(`Latest tag: ${latestStr}`);
+            core.info(`Allowed next versions: ${allowed.join(', ')}`);
+            core.info(`Current Cargo.toml version: ${current}`);
+
+            if (!allowed.includes(current)) {
+              core.setFailed(
+                `Cargo.toml version "${current}" is not a valid next version after latest tag "${latestStr}". Expected one of: ${allowed.join(', ')}`
+              );
+            }
