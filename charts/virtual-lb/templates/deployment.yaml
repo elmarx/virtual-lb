@@ -37,6 +37,8 @@ spec:
           env:
             - name: LOG_FORMAT
               value: {{ .Values.logFormat | quote }}
+            - name: RUST_LOG
+              value: {{ .Values.logLevel | quote }}
           livenessProbe:
             httpGet:
               path: /healthz

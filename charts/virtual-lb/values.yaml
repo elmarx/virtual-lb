@@ -22,6 +22,11 @@ podAnnotations: {}
 podLabels: {}
 
 logFormat: json
+# controls the RUST_LOG env var (https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html)
+# uncomment kube_runtime=debug to surface retry/error details from the controller's watch/list loop
+# (e.g. RBAC or connectivity issues delaying the initial cache sync) that are otherwise silent at info level
+logLevel: info
+# logLevel: info,kube_runtime=debug
 
 resources:
   limits:
