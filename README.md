@@ -1,4 +1,6 @@
-# virtual-lb
+# virtual-lb — Kubernetes virtual loadbalancer
+
+<img src="logo.png" alt="virtual-lb logo" align="right" width="240">
 
 Kubernetes controller that implements a custom [LoadBalancer class](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancerclass) to aggregate multiple LoadBalancer services into a single virtual [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) by collecting their external IPs.
 
