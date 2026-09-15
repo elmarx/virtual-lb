@@ -23,11 +23,21 @@ helm install virtual-lb oci://ghcr.io/elmarx/charts/virtual-lb
 ## Usage
 
 1. **Label member services:**
-   - Add labels to each LoadBalancer service you want to aggregate:
-     - `athmer.cloud/virtual-lb.member: "true"`
-     - `athmer.cloud/virtual-lb.name: <cluster-name>`
+    - Add labels to each LoadBalancer service you want to aggregate:
+        - `athmer.cloud/virtual-lb.member: "true"`
+        - `athmer.cloud/virtual-lb.name: <cluster-name>`
 
 2. **Create virtual LoadBalancer service:**
-   - Create a Service with `loadBalancerClass: athmer.cloud/virtual-lb`
-   - Add annotation `athmer.cloud/virtual-lb.name: <cluster-name>`
-   - Controller will populate its status with IPs from all matching member services
+    - Create a service with `loadBalancerClass: athmer.cloud/virtual-lb`
+    - Add annotation `athmer.cloud/virtual-lb.name: <cluster-name>`
+    - Controller will populate its status with IPs from all matching member services
+
+## Demo
+
+Using [kind](https://kind.sigs.k8s.io/), a simple demo is available. It can be set up by running `just build demo`:
+
+- deploy the virtual-lb controller to the cluster
+- create two load balancers (*a*, *b*) to be aggregated — assign them dummy IP addresses — these LBs will not route any traffic
+- create a virtual-lb service that is reconciled by the controller and assigned the IP addresses
+
+You can play around and test the demo. To re-run the demo script, delete the demo namespace.

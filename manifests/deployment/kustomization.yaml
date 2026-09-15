@@ -17,5 +17,5 @@ labels:
     includeTemplates: true
 
 images:
-  - name: registry.athmer.cloud/virtual-lb
+  - name: virtual-lb
     newTag: latest

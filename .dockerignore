@@ -3,5 +3,9 @@
 .jj
 .idea
 *.md
+
 Dockerfile
 .dockerignore
+
+charts
+manifests

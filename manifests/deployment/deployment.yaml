@@ -16,11 +16,21 @@ spec:
     spec:
       serviceAccountName: virtual-lb
       containers:
-        - image: registry.athmer.cloud/virtual-lb:latest
+        - image: virtual-lb:latest
+          imagePullPolicy: IfNotPresent
           name: virtual-lb
-          env:
-            - name: LOG_FORMAT
-              value: json
+          ports:
+            - name: management
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: management
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: management
           resources:
             limits:
               memory: 16Mi
