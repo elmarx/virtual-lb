@@ -19,6 +19,14 @@ spec:
         - image: virtual-lb:latest
           imagePullPolicy: IfNotPresent
           name: virtual-lb
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: management
               containerPort: 8080
