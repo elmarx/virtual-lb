@@ -1,5 +1,5 @@
 image := "virtual-lb"
-revision := `jj log -r @ --no-graph --template 'self.commit_id().short()'`
+revision := `(command -v jj > /dev/null && jj log -r @ --no-graph --template 'self.commit_id().short()' 2> /dev/null) || git rev-parse --short HEAD`
 
 # run all local CI checks: compile check, tests, formatting, and lints
 ci:
