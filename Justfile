@@ -40,6 +40,8 @@ demo:
     # create the sample virtual LB
     kubectl apply -f ./manifests/example/lb.yaml
 
+    kubectl rollout status -n virtual-lb deployment/virtual-lb --timeout 2m
+
     # set up dummy LBs
     kubectl create -n demo svc loadbalancer a --tcp 8080
     kubectl create -n demo svc loadbalancer b --tcp 8080
