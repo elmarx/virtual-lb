@@ -13,21 +13,15 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --locked
 
-FROM debian:trixie-slim
+FROM gcr.io/distroless/cc-debian13:nonroot
 
 LABEL org.opencontainers.image.title="virtual-lb" \
       org.opencontainers.image.description="Kubernetes controller for virtual LoadBalancer Services" \
       org.opencontainers.image.source="https://github.com/elmarx/virtual-lb"
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --system --no-create-home --shell /usr/bin/nologin virtual-lb
+WORKDIR /
 
-USER virtual-lb
-WORKDIR /virtual-lb
-
-COPY --from=builder /usr/src/virtual-lb/target/release/virtual-lb /usr/local/bin/virtual-lb
+COPY --from=builder /usr/src/virtual-lb/target/release/virtual-lb /
 
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/virtual-lb"]
+ENTRYPOINT ["/virtual-lb"]
