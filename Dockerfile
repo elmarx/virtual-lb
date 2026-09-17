@@ -1,6 +1,5 @@
-FROM rust:1.98-slim AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.98 AS chef
 WORKDIR /usr/src/virtual-lb
-RUN cargo install cargo-chef --locked
 
 FROM chef AS planner
 COPY . .
