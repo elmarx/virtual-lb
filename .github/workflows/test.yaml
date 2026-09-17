@@ -35,6 +35,16 @@ jobs:
       - name: Lint pedantic
         run: cargo clippy --all-features --all-targets -- -D clippy::pedantic
 
+      - uses: actions/checkout@v7
+      - uses: helm/chart-testing-action@v2.8.0
+
+      - name: Lint Helm chart
+        run: ct lint --charts charts/virtual-lb
+
+      - name: Render Helm chart
+        run: |
+          helm template virtual-lb charts/virtual-lb
+
   smoke-test:
     name: Smoke test
     runs-on: ubuntu-latest
