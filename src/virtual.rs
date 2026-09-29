@@ -1,6 +1,14 @@
 use crate::service_ext::ServiceExt;
-use k8s_openapi::api::core::v1::{LoadBalancerStatus, Service, ServiceStatus};
+use k8s_openapi::api::core::v1::{LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus};
 use kube::api::ObjectList;
+
+/// detect if there is more than one hostname in the virtual load balancer group
+fn conflicting_hostnames(ingress: &[&LoadBalancerIngress]) -> bool {
+    let first_hostname = ingress.first().and_then(|i| i.hostname.as_deref());
+    ingress
+        .iter()
+        .any(|i| i.hostname.as_deref() != first_hostname)
+}
 
 /// given a list of "real" LoadBalancer-Services, create a service-status that combines these service-ingresses into a new status
 ///
@@ -31,6 +39,7 @@ pub fn combine_members(lb_members: &ObjectList<Service>) -> ServiceStatus {
 #[cfg(test)]
 mod tests {
     use super::combine_members;
+    use crate::r#virtual::conflicting_hostnames;
     use k8s_openapi::api::core::v1::{
         LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus,
     };
@@ -58,6 +67,51 @@ mod tests {
             metadata: ListMeta::default(),
             items,
         }
+    }
+
+    #[test]
+    fn no_conflict_with_zero_or_one_ingress() {
+        let ingress = LoadBalancerIngress {
+            hostname: Some("lb.example.com".to_owned()),
+            ..Default::default()
+        };
+
+        assert!(!conflicting_hostnames(&[]));
+        assert!(!conflicting_hostnames(&[&ingress]));
+    }
+
+    #[test]
+    fn no_conflict_with_matching_hostnames() {
+        let first = LoadBalancerIngress {
+            hostname: Some("lb.example.com".to_owned()),
+            ..Default::default()
+        };
+        let second = LoadBalancerIngress {
+            hostname: Some("lb.example.com".to_owned()),
+            ip: Some("192.0.2.2".to_owned()),
+            ..Default::default()
+        };
+        let missing = LoadBalancerIngress::default();
+
+        assert!(!conflicting_hostnames(&[&first, &second]));
+        assert!(!conflicting_hostnames(&[&missing, &missing]));
+    }
+
+    #[test]
+    fn detects_conflicting_hostnames() {
+        let first = LoadBalancerIngress {
+            hostname: Some("lb-1.example.com".to_owned()),
+            ..Default::default()
+        };
+        let second = LoadBalancerIngress {
+            hostname: Some("lb-2.example.com".to_owned()),
+            ..Default::default()
+        };
+        let missing = LoadBalancerIngress::default();
+
+        assert!(conflicting_hostnames(&[&first, &second]));
+        assert!(conflicting_hostnames(&[&first, &missing]));
+        assert!(conflicting_hostnames(&[&missing, &first]));
     }
 
     #[test]
