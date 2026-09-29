@@ -1,8 +1,8 @@
 use crate::constants::{MANAGER, VIRTUAL_LB_NAME_KEY, selector};
 use crate::context::Context;
-use crate::errors;
 use crate::service_ext::ServiceExt;
-use k8s_openapi::api::core::v1::{LoadBalancerStatus, Service, ServiceStatus};
+use crate::{errors, r#virtual};
+use k8s_openapi::api::core::v1::Service;
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::runtime::controller::Action;
 use kube::{Api, ResourceExt};
@@ -50,36 +50,15 @@ pub async fn reconcile(
         lb_members.items.len()
     );
 
-    let mut ingress = lb_members
-        .iter()
-        .flat_map(ServiceExt::ingress)
-        .collect::<Vec<_>>();
+    let service_status = r#virtual::combine_members(&lb_members);
 
-    // sort (to avoid needless updates) and dedup
-    ingress.sort_unstable_by_key(|k| (k.hostname.as_deref(), k.ip.as_deref()));
-    ingress.dedup();
-
-    let ingress = ingress
-        .into_iter()
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-
-    let service_status = Service {
-        status: Some(ServiceStatus {
-            load_balancer: Some(LoadBalancerStatus {
-                ingress: Some(ingress),
-            }),
-            ..Default::default()
-        }),
+    let service = Service {
+        status: Some(service_status),
         ..Default::default()
     };
 
     service_api
-        .patch_status(
-            &name,
-            &PatchParams::apply(MANAGER),
-            &Patch::Apply(service_status),
-        )
+        .patch_status(&name, &PatchParams::apply(MANAGER), &Patch::Apply(service))
         .await?;
 
     info!("set loadbalancer for: {name}");

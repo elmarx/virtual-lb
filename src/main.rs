@@ -5,6 +5,7 @@ mod reconcile;
 mod server;
 mod service_ext;
 mod telemetry;
+mod r#virtual;
 
 use crate::constants::selector;
 use crate::context::Context;
