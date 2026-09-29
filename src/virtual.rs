@@ -23,9 +23,21 @@ pub fn combine_members(lb_members: &ObjectList<Service>) -> ServiceStatus {
     ingress.sort_unstable_by_key(|k| (k.hostname.as_deref(), k.ip.as_deref()));
     ingress.dedup();
 
+    // if we have conflicting hostnames, we have to strip the hostnames
+    let strip_hostnames = conflicting_hostnames(&ingress);
+
     let ingress = ingress
         .into_iter()
-        .map(ToOwned::to_owned)
+        .map(|i| LoadBalancerIngress {
+            hostname: if strip_hostnames {
+                None
+            } else {
+                i.hostname.clone()
+            },
+            ip: i.ip.clone(),
+            ip_mode: i.ip_mode.clone(),
+            ports: i.ports.clone(),
+        })
         .collect::<Vec<_>>();
 
     ServiceStatus {
@@ -38,8 +50,7 @@ pub fn combine_members(lb_members: &ObjectList<Service>) -> ServiceStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::combine_members;
-    use crate::r#virtual::conflicting_hostnames;
+    use super::{combine_members, conflicting_hostnames};
     use k8s_openapi::api::core::v1::{
         LoadBalancerIngress, LoadBalancerStatus, Service, ServiceStatus,
     };
@@ -143,12 +154,37 @@ mod tests {
         let expected = vec![
             LoadBalancerIngress {
                 ip: Some("192.0.2.1".to_owned()),
-                hostname: Some("lb-1.example.com".to_owned()),
+                hostname: None,
                 ..Default::default()
             },
             LoadBalancerIngress {
                 ip: Some("192.0.2.2".to_owned()),
-                hostname: Some("lb-2.example.com".to_owned()),
+                hostname: None,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn preserves_shared_hostname() {
+        let sample = members(vec![
+            service_with_ingress("192.0.2.1", "lb.example.com"),
+            service_with_ingress("192.0.2.2", "lb.example.com"),
+        ]);
+
+        let actual = combine_members(&sample);
+        let actual = actual.load_balancer.and_then(|lb| lb.ingress).unwrap();
+
+        let expected = vec![
+            LoadBalancerIngress {
+                ip: Some("192.0.2.1".to_owned()),
+                hostname: Some("lb.example.com".to_owned()),
+                ..Default::default()
+            },
+            LoadBalancerIngress {
+                ip: Some("192.0.2.2".to_owned()),
+                hostname: Some("lb.example.com".to_owned()),
                 ..Default::default()
             },
         ];
