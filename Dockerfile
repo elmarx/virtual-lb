@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.98 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.99 AS chef
 WORKDIR /usr/src/virtual-lb
 
 FROM chef AS planner
