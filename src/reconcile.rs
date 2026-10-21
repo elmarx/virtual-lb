@@ -33,10 +33,7 @@ pub async fn reconcile(
     let service_api = Api::<Service>::namespaced(ctx.client.clone(), &ns);
 
     let list_parems = ListParams::default()
-        .labels(&format!(
-            "{VIRTUAL_LB_NAME_KEY}={lb_name},{}",
-            selector::VIRTUAL_LB_IS_MEMBER
-        ))
+        .labels(&lb_name.member_selector())
         .fields(selector::TYPE_LB);
     let lb_members = service_api.list(&list_parems).await?;
     if lb_members.items.is_empty() {

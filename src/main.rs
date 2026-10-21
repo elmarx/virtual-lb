@@ -6,6 +6,7 @@ mod server;
 mod service_ext;
 mod telemetry;
 mod r#virtual;
+mod virtual_lb_name;
 
 use crate::constants::selector;
 use crate::context::Context;
